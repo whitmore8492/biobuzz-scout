@@ -1,0 +1,16 @@
+{
+ "name": "BioBuzz Scout",
+ "short_name": "BioBuzz",
+ "start_url": "./",
+ "scope": "./",
+ "display": "standalone",
+ "background_color": "#E9EDEF",
+ "theme_color": "#E3A008",
+ "icons": [
+  {
+   "src": "icon.png",
+   "sizes": "512x512",
+   "type": "image/png"
+  }
+ ]
+}
