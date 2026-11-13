@@ -545,16 +545,16 @@ function vSync(){
   <section class="panel"><h3>Export from this phone</h3>
     <p>This phone has <b>${exportCount()}</b> scouting entr${exportCount()===1?'y':'ies'} to send.</p>
     ${STORE_OK?'':'<p class="preview bad">This browser isn\'t saving entries. They disappear if the page reloads or closes. Send your export code after every few matches, and before closing the page.</p>'}
-    <p class="small muted">Paste the code into a text or email, or save it as a file. A whole code starts with BBZ1: and ends with :END.</p>
+    <p class="small muted">No internet? AirDrop the backup to your lead scout's iPad. With internet, you can also paste the code into a text or email. A whole code starts with BBZ1: and ends with :END.</p>
     ${(S.dbState!=='ok'||S.readOnly)&&exportCount()?`<p class="small">${unsentCount()?`<b>${unsentCount()}</b> not backed up or sent since ${S.sentAt?new Date(S.sentAt).toLocaleString([], {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'you started'}.`:'Everything is backed up or sent.'}</p>`:''}
-    <div class="row">${canSaveFiles()?'<button class="btn primary" data-act="file-export">Save backup file</button>':''}<button class="btn" data-act="copy-export">Copy export code</button></div>
+    <div class="row">${backupBtns()}</div>
     <textarea id="exportBox" readonly hidden></textarea>
   </section>
   <section class="panel"><h3>Import from another phone</h3>
     <label class="field"><span>Paste an export code or event setup code</span><textarea id="importText" placeholder="Paste here">${esc(S.importText)}</textarea></label>
     ${S.importMsg?`<div class="preview ${S.importOk?'ok':'bad'}">${esc(S.importMsg)}</div>`:''}
-    <div class="row"><button class="btn primary" data-act="import">Merge into this phone</button><label class="btn">Open file…<input type="file" id="importFile" accept=".txt,.json,text/plain,application/json" hidden></label></div>
-    <p class="small muted">Merging keeps the newest version of each entry, and anything imported uploads to the shared list when you're online.</p>
+    <div class="row"><button class="btn primary" data-act="import">Merge into this phone</button><label class="btn">Open backup file…<input type="file" id="importFile" accept=".txt,.json,text/plain,application/json" hidden></label></div>
+    <p class="small muted">Merging keeps the newest version of each entry, and anything imported uploads to the shared list when you're online. Lead scout: merge every scout's backup here. The Teams tab works offline on everything merged.</p>
   </section>`;
 }
 
@@ -628,7 +628,7 @@ function importPayload(text){
   if(j==='broken'){msgImport('That code got changed on the way. Ask the scout to send it again, or to use Save as file.');return}
   if(!j||j.app!=='biobuzz-scout'){msgImport('That isn\'t a BioBuzz Scout export code.');return}
   let ne=0,nv=0;
-  for(const v of j.events||[])if(mergeEvent(v)){nv++;S.outbox['v:'+v.key]=1}
+  for(const v of j.events||[]){if(j.kind==='events'&&v&&v.key&&!S.db){/* a setup code from the lead scout always wins on scouting devices */S.events[v.key]={...v,updatedAt:Math.max(v.updatedAt||0,((S.events[v.key]||{}).updatedAt||0)+1)};nv++;continue}if(mergeEvent(v)){nv++;S.outbox['v:'+v.key]=1}}
   for(const e of j.entries||[])if(mergeEntry(e)){if(!e.deleted)ne++;S.outbox['e:'+e.id]=1}
   if(!S.cur&&j.events&&j.events[0])S.cur=j.events[0].key;
   persist();subEntries();flushSoon();S.importText='';
@@ -685,10 +685,18 @@ function backupName(){const d=new Date(),p=n=>String(n).padStart(2,'0');return `
 function reminderHTML(){
   if(S.dbState==='ok'&&!S.readOnly)return '';
   const n=unsentCount();if(n<5)return '';
-  return `<div class="remind"><b>${n} entries haven't been backed up or sent.</b><span class="small">Do it now, before you scout more.</span><div class="btnrow">${canSaveFiles()?'<button class="btn primary" data-act="file-export">Save backup file</button>':''}<button class="btn" data-act="copy-export">Copy export code</button></div></div>`;
+  return `<div class="remind"><b>${n} entries haven't been backed up or sent.</b><span class="small">Do it now, before you scout more.</span><div class="btnrow">${backupBtns()}</div></div>`;
 }
 function encodeCode(json){const b=new TextEncoder().encode(json);let bin='';for(let i=0;i<b.length;i+=8192)bin+=String.fromCharCode.apply(null,b.subarray(i,i+8192));
   return 'BBZ1:'+btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')+':END'}
+/* AirDrop / share sheet: works on iPads with no internet (outside Claude only) */
+function canShareFiles(){if(IN_CLAUDE()||!navigator.canShare||!navigator.share)return false;try{return navigator.canShare({files:[new File(['x'],'x.txt',{type:'text/plain'})]})}catch(e){return false}}
+async function shareFile(){
+  const f=new File([exportPayload()],backupName(),{type:'text/plain'});
+  try{await navigator.share({files:[f],title:'BioBuzz scouting backup'});markSent();toast('Backup sent')}
+  catch(e){if(e&&e.name==='AbortError')return;toast('Sharing didn\'t work. Use Save backup file instead.')}
+}
+function backupBtns(){const sh=canShareFiles();return `${sh?'<button class="btn primary" data-act="share-file">AirDrop / share backup</button>':''}${canSaveFiles()?`<button class="btn ${sh?'':'primary'}" data-act="file-export">Save backup file</button>`:''}<button class="btn" data-act="copy-export">Copy export code</button>`}
 function setupPayload(){return encodeCode(JSON.stringify({app:'biobuzz-scout',v:2,kind:'events',exportedAt:new Date().toISOString(),from:S.scout.trim(),cur:S.cur,events:liveEvents(),entries:[]}))}
 async function copyText(t){
   try{await navigator.clipboard.writeText(t);toast('Copied');return true}catch(e){
@@ -741,6 +749,7 @@ document.addEventListener('click',e=>{
     case 'sync-now':flush();toast('Syncing…');return;
     case 'copy-export':copyText(exportPayload()).then(ok=>{if(ok){markSent();toast(`Copied ${exportCount()} entries. Paste them to your lead scout.`)}});return;
     case 'file-export':saveFile(backupName(),exportPayload()).then(ok=>{if(ok)markSent()});return;
+    case 'share-file':shareFile();return;
     case 'copy-setup':copyText(setupPayload()).then(ok=>{if(ok)toast('Copied event setup code')});return;
     case 'import':{const t=($('#importText')||{}).value||'';if(!t.trim()){toast('Paste an export code first');return}importPayload(t);return}
   }
