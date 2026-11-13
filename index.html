@@ -500,7 +500,7 @@ function vEvent(){
   const pubPanel=S.canPublish?`<section class="panel pub"><div class="row" style="align-items:center"><div style="flex:1 1 220px;min-width:0"><h3>Share with every scout</h3><p class="small muted">${unpub?`${unpub} event change${unpub===1?'':'s'} only on the shared list. Scouts without a Claude login won't see ${unpub===1?'it':'them'} until you publish.`:'Scouts without a Claude login have everything you see here.'}${SEED.publishedAt?` Last published ${new Date(SEED.publishedAt).toLocaleString([], {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}.`:''}</p></div><button class="btn ${S.armed==='pub'?'armed':'primary'}" data-act="publish-page" ${S.publishing?'disabled':''}>${S.publishing?'Publishing…':S.armed==='pub'?'Tap again to publish':'Publish to everyone'}</button></div><p class="small muted">Builds the events on this phone into the page. Open pages reload, and scouts keep any entry they're in the middle of.</p></section>`:'';
   return `
   ${pubPanel}
-  ${evs.length?`<section class="panel"><h3>Send events to the iPads</h3><p class="small muted">Copies every event's teams and schedule, with no scouting entries. Scouts paste it on their Sync tab.</p><div class="btnrow"><button class="btn" data-act="copy-setup">Copy event setup code</button></div></section>`:''}
+  ${evs.length?`<section class="panel"><h3>Send events to the iPads</h3><p class="small muted">Copies every event's teams and schedule, with no scouting entries. Scouts paste it on their Sync tab.</p><div class="btnrow"><button class="btn" data-act="copy-setup">Copy event setup code</button>${canSaveFiles()?'<button class="btn" data-act="file-setup">Save setup file</button>':''}</div><textarea id="setupBox" readonly hidden></textarea><p class="small muted">On the iPad: Sync, then paste the code and tap Merge, or tap Open backup file… and pick the setup file.</p></section>`:''}
   ${evs.length?`<section class="panel"><h3>Events on this phone</h3><div class="evlist">${evs.map(e=>`<div class="ev ${e.key===S.cur?'cur':''}"><div><b>${esc(e.name||e.code)}</b><span class="small muted">${esc(e.code)} · ${e.teams.length} teams · ${e.matches.length} matches</span>${leagueOf(e)?` <span class="tag lg">${esc(leagueOf(e))}</span>`:' <span class="tag">Non-league</span>'}</div>${e.key===S.cur?'<span class="tag good">Current</span>':`<button class="btn" data-use="${esc(e.key)}">Use</button>`}<button class="btn ghost" data-editev="${esc(e.key)}">Edit</button><button class="btn ${S.armed==='delev:'+e.key?'armed':'ghost danger'}" data-delev="${esc(e.key)}">${S.armed==='delev:'+e.key?'Delete?':'Delete'}</button></div>`).join('')}</div></section>`:''}
   <section class="panel">
     <h2>${st.editing?'Update event':'Add an event'}</h2>
@@ -555,6 +555,7 @@ function vSync(){
     ${S.importMsg?`<div class="preview ${S.importOk?'ok':'bad'}">${esc(S.importMsg)}</div>`:''}
     <div class="row"><button class="btn primary" data-act="import">Merge into this phone</button><label class="btn">Open backup file…<input type="file" id="importFile" accept=".txt,.json,text/plain,application/json" hidden></label></div>
     <p class="small muted">Merging keeps the newest version of each entry, and anything imported uploads to the shared list when you're online. Lead scout: merge every scout's backup here. The Teams tab works offline on everything merged.</p>
+    <p class="small muted">App version: Nov 12 · B</p>
   </section>`;
 }
 
@@ -614,10 +615,10 @@ function exportPayload(){const json=JSON.stringify({app:'biobuzz-scout',v:2,expo
   const b=new TextEncoder().encode(json);let bin='';for(let i=0;i<b.length;i+=8192)bin+=String.fromCharCode.apply(null,b.subarray(i,i+8192));
   return 'BBZ1:'+btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')+':END'}
 function decodePayload(text){
-  const t=String(text||'');const m=t.match(/BBZ1:([\s\S]*?):END/);
+  const t=String(text||'');const m=t.match(/B\s*B\s*Z\s*1\s*:([\s\S]*?):\s*E\s*N\s*D/i);
   if(m){const s=m[1].replace(/[^A-Za-z0-9_-]/g,'').replace(/-/g,'+').replace(/_/g,'/');
     try{const bin=atob(s+'==='.slice((s.length+3)%4));const u=Uint8Array.from(bin,c=>c.charCodeAt(0));return JSON.parse(new TextDecoder().decode(u))}catch(e){return 'broken'}}
-  if(/BBZ1:/.test(t))return 'cut';
+  if(/B\s*B\s*Z\s*1\s*:/i.test(t))return 'cut';
   const a=t.indexOf('{'),z=t.lastIndexOf('}');if(a<0||z<a)return null;
   try{return JSON.parse(t.slice(a,z+1).replace(/[“”]/g,'"'))}catch(e){return 'broken'}
 }
@@ -626,7 +627,7 @@ function importPayload(text){
   const j=decodePayload(text);
   if(j==='cut'){msgImport('The code is cut off. A whole code starts with BBZ1: and ends with :END. Ask for it again, or have the scout use Save as file.');return}
   if(j==='broken'){msgImport('That code got changed on the way. Ask the scout to send it again, or to use Save as file.');return}
-  if(!j||j.app!=='biobuzz-scout'){msgImport('That isn\'t a BioBuzz Scout export code.');return}
+  if(!j||j.app!=='biobuzz-scout'){const sn=String(text||'').trim().replace(/\s+/g,' ');msgImport(sn?`That isn't a BioBuzz Scout code. What was pasted starts with: "${sn.slice(0,40)}${sn.length>40?'…':''}". A code starts with BBZ1:`:'Nothing was pasted. Copy the code again, or use Open backup file… with a setup file.');return}
   let ne=0,nv=0;
   for(const v of j.events||[]){if(j.kind==='events'&&v&&v.key&&!S.db){/* a setup code from the lead scout always wins on scouting devices */S.events[v.key]={...v,updatedAt:Math.max(v.updatedAt||0,((S.events[v.key]||{}).updatedAt||0)+1)};nv++;continue}if(mergeEvent(v)){nv++;S.outbox['v:'+v.key]=1}}
   for(const e of j.entries||[])if(mergeEntry(e)){if(!e.deleted)ne++;S.outbox['e:'+e.id]=1}
@@ -698,9 +699,9 @@ async function shareFile(){
 }
 function backupBtns(){const sh=canShareFiles();return `${sh?'<button class="btn primary" data-act="share-file">AirDrop / share backup</button>':''}${canSaveFiles()?`<button class="btn ${sh?'':'primary'}" data-act="file-export">Save backup file</button>`:''}<button class="btn" data-act="copy-export">Copy export code</button>`}
 function setupPayload(){return encodeCode(JSON.stringify({app:'biobuzz-scout',v:2,kind:'events',exportedAt:new Date().toISOString(),from:S.scout.trim(),cur:S.cur,events:liveEvents(),entries:[]}))}
-async function copyText(t){
+async function copyText(t,boxId='exportBox'){
   try{await navigator.clipboard.writeText(t);toast('Copied');return true}catch(e){
-    const box=$('#exportBox');if(box){box.hidden=false;box.value=t;box.focus();box.select();toast('Select all and copy the code below')}return false}
+    const box=document.getElementById(boxId);if(box){box.hidden=false;box.value=t;box.focus();box.select();toast('Copying is blocked here. Select all the text in the box and copy it.')}else toast('Copying is blocked here. Use Save file instead.');return false}
 }
 
 document.addEventListener('click',e=>{
@@ -750,7 +751,8 @@ document.addEventListener('click',e=>{
     case 'copy-export':copyText(exportPayload()).then(ok=>{if(ok){markSent();toast(`Copied ${exportCount()} entries. Paste them to your lead scout.`)}});return;
     case 'file-export':saveFile(backupName(),exportPayload()).then(ok=>{if(ok)markSent()});return;
     case 'share-file':shareFile();return;
-    case 'copy-setup':copyText(setupPayload()).then(ok=>{if(ok)toast('Copied event setup code')});return;
+    case 'copy-setup':copyText(setupPayload(),'setupBox').then(ok=>{if(ok)toast('Copied event setup code')});return;
+    case 'file-setup':{const d=new Date(),p=n=>String(n).padStart(2,'0');saveFile(`biobuzz-setup-${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}.txt`,setupPayload());return}
     case 'import':{const t=($('#importText')||{}).value||'';if(!t.trim()){toast('Paste an export code first');return}importPayload(t);return}
   }
 });
