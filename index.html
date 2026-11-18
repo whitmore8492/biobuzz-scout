@@ -487,6 +487,9 @@ function vDetail(r,isLg){
   <div class="row"><button class="btn" data-edit="${e.id}">Edit</button><button class="btn ${S.armed==='del:'+e.id?'armed':'danger'}" data-del="${e.id}">${S.armed==='del:'+e.id?'Tap again to delete':'Delete'}</button></div></div>`).join(''):'<p class="muted">No entries yet for this team.</p>'}</section>`;
 }
 
+/* update the paste previews in place: redrawing the form while the paste box loses focus swallowed taps on Save */
+function refreshSetup(){if(S.view!=='event')return;const tmp=document.createElement('div');tmp.innerHTML=vEvent();for(const id of ['tPrev','mPrev','evLinks']){const a=document.getElementById(id),b=tmp.querySelector('#'+id);if(a&&b&&a.innerHTML!==b.innerHTML)a.innerHTML=b.innerHTML}const s=document.querySelector('#app [data-act=save-event]');if(s)s.disabled=!(S.setup.code.trim()&&S.setup.season.trim())}
+let refreshT=null;function refreshSoon(){clearTimeout(refreshT);refreshT=setTimeout(refreshSetup,300)}
 function vEvent(){
   const st=S.setup;const code=st.code.trim().toUpperCase();const season=st.season.trim();
   const tParsed=st.teamsText.trim()?parseTeams(st.teamsText):null;const mParsed=st.schedText.trim()?parseSchedule(st.schedText):null;
@@ -512,19 +515,19 @@ function vEvent(){
     <label class="field"><span>League</span><input type="text" id="suGroup" list="leagueList" value="${esc(st.group)}" placeholder="Leave blank for a non-league event" autocomplete="off"><datalist id="leagueList">${leagueNames().map(g=>`<option value="${esc(g)}"></option>`).join('')}</datalist></label>
     <p class="small muted">Give every meet and the league tournament the same league name, and the Teams tab can combine them. Leave it blank for a non-league tournament, and its data stays separate.</p>
     <p class="small muted">BioBuzz is the 2026–27 season, which FTC Events files under 2026.</p>
-    ${links}
+    <div id="evLinks">${links}</div>
   </section>
   <section class="panel">
     <h3>1 · Teams</h3>
     <ol class="steps"><li>Open <b>FTC Events · Teams</b> above.</li><li>Select the team table, copy, and paste it here. A list like <code>12345 Gear Grinders</code>, one per line, works too.</li></ol>
     <textarea id="suTeams" placeholder="Paste teams here">${esc(st.teamsText)}</textarea>
-    ${tParsed?`<div class="preview ${tParsed.length?'ok':'bad'}">${tParsed.length?`Found ${tParsed.length} teams: ${tParsed.slice(0,4).map(t=>t.n).join(', ')}${tParsed.length>4?'…':''}`:'No team numbers found. Check that the paste has a number at the start of each row.'}</div>`:''}
+    <div id="tPrev">${tParsed?`<div class="preview ${tParsed.length?'ok':'bad'}">${tParsed.length?`Found ${tParsed.length} teams: ${tParsed.slice(0,4).map(t=>t.n).join(', ')}${tParsed.length>4?'…':''}`:'No team numbers found. Check that the paste has a number at the start of each row.'}</div>`:''}</div>
   </section>
   <section class="panel">
     <h3>2 · Qualification schedule</h3>
     <ol class="steps"><li>Open <b>FTC Events · Qual schedule</b>, copy the schedule table and paste it here.</li><li>Or open <b>FTCScout schedule data</b>, select all, copy and paste. That works once the schedule is published.</li></ol>
     <textarea id="suSched" placeholder="Paste schedule here">${esc(st.schedText)}</textarea>
-    ${mParsed?`<div class="preview ${mParsed.length?'ok':'bad'}">${mParsed.length?`Found ${mParsed.length} matches. ${esc(mParsed[0].label)}: red ${mParsed[0].red.join(' & ')} vs blue ${mParsed[0].blue.join(' & ')}`:'No matches found. Each match needs a label like Q1 followed by four team numbers.'}</div>`:''}
+    <div id="mPrev">${mParsed?`<div class="preview ${mParsed.length?'ok':'bad'}">${mParsed.length?`Found ${mParsed.length} matches. ${esc(mParsed[0].label)}: red ${mParsed[0].red.join(' & ')} vs blue ${mParsed[0].blue.join(' & ')}`:'No matches found. Each match needs a label like Q1 followed by four team numbers.'}</div>`:''}</div>
   </section>
   <div class="savebar"><button class="btn" data-act="clear-setup">Clear</button><button class="btn primary" data-act="save-event" ${code&&season?'':'disabled'}>Save and share event</button></div>
   <p class="small muted">Pasting is optional. Without a schedule, scouts type the match and team number. Without a team list, teams come from the schedule.</p>`;
@@ -555,7 +558,7 @@ function vSync(){
     ${S.importMsg?`<div class="preview ${S.importOk?'ok':'bad'}">${esc(S.importMsg)}</div>`:''}
     <div class="row"><button class="btn primary" data-act="import">Merge into this phone</button><label class="btn">Open backup file…<input type="file" id="importFile" accept=".txt,.json,text/plain,application/json" hidden></label></div>
     <p class="small muted">Merging keeps the newest version of each entry, and anything imported uploads to the shared list when you're online. Lead scout: merge every scout's backup here. The Teams tab works offline on everything merged.</p>
-    <p class="small muted">App version: Nov 12 · B</p>
+    <p class="small muted">App version: Nov 17 · C</p>
   </section>`;
 }
 
@@ -761,12 +764,12 @@ document.addEventListener('input',e=>{
   if(t.classList.contains('ctr-val')){setCount(t.dataset.p,t.dataset.k,t.value,true);return}
   if(t.id==='scoutName'){S.scout=t.value;persist();return}
   if(t.id==='notes'){S.draft.notes=t.value;saveDraft();return}
-  if(t.id==='suSeason'){S.setup.season=t.value;return}
-  if(t.id==='suCode'){S.setup.code=t.value;return}
+  if(t.id==='suSeason'){S.setup.season=t.value;refreshSoon();return}
+  if(t.id==='suCode'){S.setup.code=t.value;refreshSoon();return}
   if(t.id==='suName'){S.setup.name=t.value;return}
   if(t.id==='suGroup'){S.setup.group=t.value;return}
-  if(t.id==='suTeams'){S.setup.teamsText=t.value;return}
-  if(t.id==='suSched'){S.setup.schedText=t.value;return}
+  if(t.id==='suTeams'){S.setup.teamsText=t.value;refreshSoon();return}
+  if(t.id==='suSched'){S.setup.schedText=t.value;refreshSoon();return}
   if(t.id==='importText'){S.importText=t.value;return}
 });
 document.addEventListener('change',e=>{
@@ -775,7 +778,7 @@ document.addEventListener('change',e=>{
   if(t.id==='matchSel'){S.pickMatch=t.value;persist();render();return}
   if(t.id==='canEmpty'){S.draft.canEmpty=t.checked;saveDraft();return}
   if(t.id==='paper'){S.draft.paper=t.checked;saveDraft();return}
-  if(['suSeason','suCode','suTeams','suSched'].includes(t.id)){render();return}
+  if(['suSeason','suCode','suTeams','suSched'].includes(t.id))return; /* previews update while typing; changing layout on blur moved the Save button out from under the tap */
   if(t.id==='importFile'&&t.files&&t.files[0]){const r=new FileReader();r.onload=()=>importPayload(String(r.result||''));r.readAsText(t.files[0]);t.value='';return}
 });
 document.addEventListener('focusin',e=>{if(e.target.classList&&e.target.classList.contains('ctr-val'))setTimeout(()=>{try{e.target.select()}catch(x){}},0)});
