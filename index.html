@@ -503,7 +503,7 @@ function vEvent(){
   const pubPanel=S.canPublish?`<section class="panel pub"><div class="row" style="align-items:center"><div style="flex:1 1 220px;min-width:0"><h3>Share with every scout</h3><p class="small muted">${unpub?`${unpub} event change${unpub===1?'':'s'} only on the shared list. Scouts without a Claude login won't see ${unpub===1?'it':'them'} until you publish.`:'Scouts without a Claude login have everything you see here.'}${SEED.publishedAt?` Last published ${new Date(SEED.publishedAt).toLocaleString([], {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}.`:''}</p></div><button class="btn ${S.armed==='pub'?'armed':'primary'}" data-act="publish-page" ${S.publishing?'disabled':''}>${S.publishing?'Publishing…':S.armed==='pub'?'Tap again to publish':'Publish to everyone'}</button></div><p class="small muted">Builds the events on this phone into the page. Open pages reload, and scouts keep any entry they're in the middle of.</p></section>`:'';
   return `
   ${pubPanel}
-  ${evs.length?`<section class="panel"><h3>Send events to the iPads</h3><p class="small muted">Copies every event's teams and schedule, with no scouting entries. Scouts paste it on their Sync tab.</p><div class="btnrow"><button class="btn" data-act="copy-setup">Copy event setup code</button>${canSaveFiles()?'<button class="btn" data-act="file-setup">Save setup file</button>':''}</div><textarea id="setupBox" readonly hidden></textarea><p class="small muted">On the iPad: Sync, then paste the code and tap Merge, or tap Open backup file… and pick the setup file.</p></section>`:''}
+  ${evs.length?`<section class="panel"><h3>Send events to the iPads</h3><p class="small muted">Copies every event's teams and schedule, with no scouting entries. Scouts paste it on their Sync tab.</p><div class="btnrow">${canShareFiles()?'<button class="btn primary" data-act="share-setup">AirDrop / share setup file</button>':''}<button class="btn" data-act="copy-setup">Copy event setup code</button>${canSaveFiles()?'<button class="btn" data-act="file-setup">Save setup file</button>':''}</div><textarea id="setupBox" readonly hidden></textarea><p class="small muted">On the iPad: Sync, then paste the code and tap Merge, or tap Open backup file… and pick the setup file.</p></section>`:''}
   ${evs.length?`<section class="panel"><h3>Events on this phone</h3><div class="evlist">${evs.map(e=>`<div class="ev ${e.key===S.cur?'cur':''}"><div><b>${esc(e.name||e.code)}</b><span class="small muted">${esc(e.code)} · ${e.teams.length} teams · ${e.matches.length} matches</span>${leagueOf(e)?` <span class="tag lg">${esc(leagueOf(e))}</span>`:' <span class="tag">Non-league</span>'}</div>${e.key===S.cur?'<span class="tag good">Current</span>':`<button class="btn" data-use="${esc(e.key)}">Use</button>`}<button class="btn ghost" data-editev="${esc(e.key)}">Edit</button><button class="btn ${S.armed==='delev:'+e.key?'armed':'ghost danger'}" data-delev="${esc(e.key)}">${S.armed==='delev:'+e.key?'Delete?':'Delete'}</button></div>`).join('')}</div></section>`:''}
   <section class="panel">
     <h2>${st.editing?'Update event':'Add an event'}</h2>
@@ -556,9 +556,9 @@ function vSync(){
   <section class="panel"><h3>Import from another phone</h3>
     <label class="field"><span>Paste an export code or event setup code</span><textarea id="importText" placeholder="Paste here">${esc(S.importText)}</textarea></label>
     ${S.importMsg?`<div class="preview ${S.importOk?'ok':'bad'}">${esc(S.importMsg)}</div>`:''}
-    <div class="row"><button class="btn primary" data-act="import">Merge into this phone</button><label class="btn">Open backup file…<input type="file" id="importFile" accept=".txt,.json,text/plain,application/json" hidden></label></div>
+    <div class="row"><button class="btn primary" data-act="import">Merge into this phone</button><label class="btn">Open backup file…<input type="file" id="importFile" hidden></label></div>
     <p class="small muted">Merging keeps the newest version of each entry, and anything imported uploads to the shared list when you're online. Lead scout: merge every scout's backup here. The Teams tab works offline on everything merged.</p>
-    <p class="small muted">App version: Nov 17 · C</p>
+    <p class="small muted">App version: Nov 19 · D</p>
   </section>`;
 }
 
@@ -678,14 +678,17 @@ async function rawExport(which){
 const IN_CLAUDE=()=>!!(window.claude&&window.claude.use);
 const canSaveFiles=()=>!!S.dl||!IN_CLAUDE();
 async function saveFile(name,data){
-  if(S.dl){try{await S.dl.save({filename:name,data});toast('Saved');return true}catch(e){if(e&&e.code!=='declined')toast('Couldn\'t save the file. Use Copy instead.');return false}}
+  if(S.dl){try{await S.dl.save({filename:name,data});toast('Saved');return true}catch(e){if(e&&e.code==='declined')return false;
+    if(/\.bbz$/.test(name)){try{await S.dl.save({filename:name.replace(/\.bbz$/,'.txt'),data});toast('Saved');return true}catch(x){}}
+    toast('Couldn\'t save the file. Use Copy instead.');return false}}
   if(IN_CLAUDE()){toast('Saving files isn\'t available here. Use Copy instead.');return false}
-  try{const u=URL.createObjectURL(new Blob([data],{type:'text/plain'}));const a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),60000);toast('Saved. Find it in Files › Downloads');return true}
+  try{const u=URL.createObjectURL(new Blob([data],{type:/\.bbz$/.test(name)?'application/octet-stream':'text/plain'}));const a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),60000);toast('Saved. Find it in Files › Downloads');return true}
   catch(e){toast('Couldn\'t save the file. Use Copy instead.');return false}
 }
 function unsentCount(){return Object.values(S.entries).filter(e=>!e.deleted&&(e.updatedAt||0)>(S.sentAt||0)).length}
 function markSent(){S.sentAt=Date.now();LS.set('sentAt',S.sentAt);render()}
-function backupName(){const d=new Date(),p=n=>String(n).padStart(2,'0');return `biobuzz-backup-${(S.scout.trim()||'scout').replace(/[^A-Za-z0-9]+/g,'-')}-${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.txt`}
+function backupName(){const d=new Date(),p=n=>String(n).padStart(2,'0');return `biobuzz-backup-${(S.scout.trim()||'scout').replace(/[^A-Za-z0-9]+/g,'-')}-${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.bbz`}
+function setupName(){const d=new Date(),p=n=>String(n).padStart(2,'0');return `biobuzz-setup-${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}.bbz`}
 function reminderHTML(){
   if(S.dbState==='ok'&&!S.readOnly)return '';
   const n=unsentCount();if(n<5)return '';
@@ -695,10 +698,13 @@ function encodeCode(json){const b=new TextEncoder().encode(json);let bin='';for(
   return 'BBZ1:'+btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')+':END'}
 /* AirDrop / share sheet: works on iPads with no internet (outside Claude only) */
 function canShareFiles(){if(IN_CLAUDE()||!navigator.canShare||!navigator.share)return false;try{return navigator.canShare({files:[new File(['x'],'x.txt',{type:'text/plain'})]})}catch(e){return false}}
-async function shareFile(){
-  const f=new File([exportPayload()],backupName(),{type:'text/plain'});
-  try{await navigator.share({files:[f],title:'BioBuzz scouting backup'});markSent();toast('Backup sent')}
-  catch(e){if(e&&e.name==='AbortError')return;toast('Sharing didn\'t work. Use Save backup file instead.')}
+/* .bbz files have no app on iPads, so AirDrop saves them to Files › Downloads instead of opening Notes */
+async function shareFile(data,name,isSetup){
+  data=data||exportPayload();name=name||backupName();
+  let f=new File([data],name,{type:'application/octet-stream'});
+  try{if(!navigator.canShare({files:[f]}))f=new File([data],name.replace(/\.bbz$/,'.txt'),{type:'text/plain'})}catch(x){}
+  try{await navigator.share({files:[f],title:isSetup?'BioBuzz event setup':'BioBuzz scouting backup'});if(!isSetup)markSent();toast(isSetup?'Setup file sent':'Backup sent')}
+  catch(e){if(e&&e.name==='AbortError')return;toast(isSetup?'Sharing didn\'t work. Use Save setup file instead.':'Sharing didn\'t work. Use Save backup file instead.')}
 }
 function backupBtns(){const sh=canShareFiles();return `${sh?'<button class="btn primary" data-act="share-file">AirDrop / share backup</button>':''}${canSaveFiles()?`<button class="btn ${sh?'':'primary'}" data-act="file-export">Save backup file</button>`:''}<button class="btn" data-act="copy-export">Copy export code</button>`}
 function setupPayload(){return encodeCode(JSON.stringify({app:'biobuzz-scout',v:2,kind:'events',exportedAt:new Date().toISOString(),from:S.scout.trim(),cur:S.cur,events:liveEvents(),entries:[]}))}
@@ -755,7 +761,8 @@ document.addEventListener('click',e=>{
     case 'file-export':saveFile(backupName(),exportPayload()).then(ok=>{if(ok)markSent()});return;
     case 'share-file':shareFile();return;
     case 'copy-setup':copyText(setupPayload(),'setupBox').then(ok=>{if(ok)toast('Copied event setup code')});return;
-    case 'file-setup':{const d=new Date(),p=n=>String(n).padStart(2,'0');saveFile(`biobuzz-setup-${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}.txt`,setupPayload());return}
+    case 'file-setup':saveFile(setupName(),setupPayload());return;
+    case 'share-setup':shareFile(setupPayload(),setupName(),true);return;
     case 'import':{const t=($('#importText')||{}).value||'';if(!t.trim()){toast('Paste an export code first');return}importPayload(t);return}
   }
 });
