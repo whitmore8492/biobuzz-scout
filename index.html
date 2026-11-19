@@ -262,7 +262,9 @@ function parseTeams(text){
 }
 
 function labelFor(level,num){const lv=String(level||'').toLowerCase();if(!lv||lv.startsWith('qual'))return 'Q'+num;if(lv.startsWith('final'))return 'F'+num;return 'P'+num}
-function parseSchedule(text){
+/* known = the event's team numbers: numbers in team names ("SPAA CyBirds 2", "#4") are not teams */
+function parseSchedule(text,known){
+  const ok=n=>!(known&&known.size)||known.has(n);
   const j=tryJSON(text);const out=[];
   if(j){
     walk(j,o=>{
@@ -281,7 +283,7 @@ function parseSchedule(text){
       if(!l.trim())continue;
       const lab=l.match(/\b(qualification|qual|q|semi-?final|final|playoff|match|m)\s*#?\s*-?\s*(\d{1,3})\b/i);
       if(lab){flush();const w=lab[1].toLowerCase();const level=w.startsWith('q')||w==='match'||w==='m'?'qual':(w.startsWith('final')?'final':'playoff');cur={label:labelFor(level,+lab[2]),num:+lab[2],level,nums:[]};l=l.slice(lab.index+lab[0].length)}
-      const nums=(l.match(/\b\d{1,5}\b/g)||[]).map(Number).filter(n=>n>0);
+      const nums=(l.match(/\b\d{1,5}\b/g)||[]).map(Number).filter(n=>n>0&&ok(n));
       if(!cur){
         if(nums.length>=5){out.push({label:'Q'+nums[0],num:nums[0],level:'qual',red:nums.slice(1,3),blue:nums.slice(3,5)});continue}
         if(nums.length===4){out.push({label:'Q'+(out.length+1),num:out.length+1,level:'qual',red:nums.slice(0,2),blue:nums.slice(2,4)});continue}
@@ -492,7 +494,7 @@ function refreshSetup(){if(S.view!=='event')return;const tmp=document.createElem
 let refreshT=null;function refreshSoon(){clearTimeout(refreshT);refreshT=setTimeout(refreshSetup,300)}
 function vEvent(){
   const st=S.setup;const code=st.code.trim().toUpperCase();const season=st.season.trim();
-  const tParsed=st.teamsText.trim()?parseTeams(st.teamsText):null;const mParsed=st.schedText.trim()?parseSchedule(st.schedText):null;
+  const tParsed=st.teamsText.trim()?parseTeams(st.teamsText):null;const knownT=new Set(((tParsed&&tParsed.length)?tParsed:((S.events[st.editing]||{}).teams||[])).map(t=>+t.n));const mParsed=st.schedText.trim()?parseSchedule(st.schedText,knownT):null;
   const evs=Object.values(S.events).filter(e=>!e.deleted).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
   const links=code&&season?`<div class="links">
     <a href="https://ftc-events.firstinspires.org/${encodeURIComponent(season)}/${encodeURIComponent(code)}/teams" target="_blank" rel="noopener">FTC Events · Teams</a>
@@ -558,7 +560,7 @@ function vSync(){
     ${S.importMsg?`<div class="preview ${S.importOk?'ok':'bad'}">${esc(S.importMsg)}</div>`:''}
     <div class="row"><button class="btn primary" data-act="import">Merge into this phone</button><label class="btn">Open backup file…<input type="file" id="importFile" hidden></label></div>
     <p class="small muted">Merging keeps the newest version of each entry, and anything imported uploads to the shared list when you're online. Lead scout: merge every scout's backup here. The Teams tab works offline on everything merged.</p>
-    <p class="small muted">App version: Nov 19 · D</p>
+    <p class="small muted">App version: Nov 19 · E</p>
   </section>`;
 }
 
@@ -747,7 +749,7 @@ document.addEventListener('click',e=>{
       if(!code){toast('Enter the event code');return}
       const key=season+'-'+code;const old=S.events[key];
       let teams=st.teamsText.trim()?parseTeams(st.teamsText):(old?old.teams:[]);
-      const matches=st.schedText.trim()?parseSchedule(st.schedText):(old?old.matches:[]);
+      const matches=st.schedText.trim()?parseSchedule(st.schedText,new Set(teams.map(t=>+t.n))):(old?old.matches:[]);
       const have=new Set(teams.map(t=>t.n));for(const m of matches)for(const t of [...m.red,...m.blue])if(!have.has(t)){have.add(t);teams.push({n:t,name:(old&&old.teams.find(x=>x.n===t)||{}).name||''})}
       teams.sort((a,b)=>a.n-b.n);
       let group=String(st.group||'').trim();const same=leagueNames().find(g=>gkey(g)===gkey(group));if(same)group=same;
