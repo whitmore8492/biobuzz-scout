@@ -560,7 +560,7 @@ function vSync(){
     ${S.importMsg?`<div class="preview ${S.importOk?'ok':'bad'}">${esc(S.importMsg)}</div>`:''}
     <div class="row"><button class="btn primary" data-act="import">Merge into this phone</button><label class="btn">Open backup file…<input type="file" id="importFile" hidden></label></div>
     <p class="small muted">Merging keeps the newest version of each entry, and anything imported uploads to the shared list when you're online. Lead scout: merge every scout's backup here. The Teams tab works offline on everything merged.</p>
-    <p class="small muted">App version: Nov 19 · E</p>
+    <div class="row" style="align-items:center"><p class="small muted" style="flex:1 1 160px">App version: Nov 19 · F</p>${IN_CLAUDE()?'':'<button class="btn" data-act="reload-app">Reload app</button>'}</div>
   </section>`;
 }
 
@@ -762,6 +762,7 @@ document.addEventListener('click',e=>{
     case 'copy-export':copyText(exportPayload()).then(ok=>{if(ok){markSent();toast(`Copied ${exportCount()} entries. Paste them to your lead scout.`)}});return;
     case 'file-export':saveFile(backupName(),exportPayload()).then(ok=>{if(ok)markSent()});return;
     case 'share-file':shareFile();return;
+    case 'reload-app':persist();saveDraft();location.replace(location.pathname+'?r='+Date.now());return;
     case 'copy-setup':copyText(setupPayload(),'setupBox').then(ok=>{if(ok)toast('Copied event setup code')});return;
     case 'file-setup':saveFile(setupName(),setupPayload());return;
     case 'share-setup':shareFile(setupPayload(),setupName(),true);return;
